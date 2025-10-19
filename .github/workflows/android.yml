@@ -1,0 +1,78 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: 
+      - main
+      - master
+  pull_request:
+    branches: 
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+      
+      - name: Decode Keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > $GITHUB_WORKSPACE/keystore.jks
+      
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+      
+      - name: Build Stable Release APK
+        run: ./gradlew assembleStableRelease --stacktrace
+        env:
+          SIGNING_STORE_FILE: ${{ github.workspace }}/keystore.jks
+          SIGNING_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      
+      - name: List build outputs
+        run: |
+          echo "=== Listing all APK files ==="
+          find . -name "*.apk" -type f
+          echo ""
+          echo "=== APK Details ==="
+          ls -lh app/build/outputs/apk/stable/release/*.apk
+      
+      - name: Upload Stable Release APK
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: app-stable-release
+          path: app/build/outputs/apk/stable/release/*.apk
+          if-no-files-found: error
+      
+      - name: Create Release
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ github.run_number }}
+          name: Release v${{ github.run_number }}
+          draft: true
+          prerelease: false
+          files: app/build/outputs/apk/stable/release/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Clean up keystore
+        if: always()
+        run: rm -f $GITHUB_WORKSPACE/keystore.jks
