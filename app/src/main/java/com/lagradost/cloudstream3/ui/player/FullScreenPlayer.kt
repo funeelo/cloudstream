@@ -73,6 +73,7 @@ import com.lagradost.cloudstream3.utils.BackPressedCallbackHelper.detachBackPres
 import com.lagradost.cloudstream3.utils.DataStoreHelper
 import com.lagradost.cloudstream3.utils.UIHelper.colorFromAttribute
 import com.lagradost.cloudstream3.utils.UIHelper.dismissSafe
+import com.lagradost.cloudstream3.utils.UIHelper.fixSystemBarsPadding
 import com.lagradost.cloudstream3.utils.UIHelper.getNavigationBarHeight
 import com.lagradost.cloudstream3.utils.UIHelper.getStatusBarHeight
 import com.lagradost.cloudstream3.utils.UIHelper.hideSystemUI
@@ -550,23 +551,23 @@ open class FullScreenPlayer : AbstractPlayerFragment() {
         val binding = SubtitleOffsetBinding.inflate(LayoutInflater.from(ctx), null, false)
 
         // Use dialog as opposed to alertdialog to get fullscreen
-        val dialog = Dialog(ctx, R.style.AlertDialogCustomBlack).apply {
+        val dialog = Dialog(ctx, R.style.DialogFullscreenPlayer).apply {
             setContentView(binding.root)
         }
         dialog.show()
+        fixSystemBarsPadding(binding.root)
 
-        val beforeOffset = subtitleDelay
-
+        var currentOffset = subtitleDelay
         binding.apply {
             var subtitleAdapter: SubtitleOffsetItemAdapter? = null
 
             subtitleOffsetInput.doOnTextChanged { text, _, _, _ ->
                 text?.toString()?.toLongOrNull()?.let { time ->
-                    subtitleDelay = time
+                    currentOffset = time
 
                     // Scroll to the first active subtitle
                     val playerPosition = player.getPosition() ?: 0
-                    val totalPosition = playerPosition - subtitleDelay
+                    val totalPosition = playerPosition - currentOffset
                     subtitleAdapter?.updateTime(totalPosition)
 
                     subtitleAdapter?.getLatestActiveItem(totalPosition)
@@ -591,19 +592,21 @@ open class FullScreenPlayer : AbstractPlayerFragment() {
                 }
             }
             subtitleOffsetInput.text =
-                Editable.Factory.getInstance()?.newEditable(beforeOffset.toString())
+                Editable.Factory.getInstance()?.newEditable(currentOffset.toString())
 
             val subtitles = player.getSubtitleCues().toMutableList()
 
             subtitleOffsetRecyclerview.isVisible = subtitles.isNotEmpty()
             noSubtitlesLoadedNotice.isVisible = subtitles.isEmpty()
 
-            val initialSubtitlePosition = (player.getPosition() ?: 0) - subtitleDelay
+            val initialSubtitlePosition = (player.getPosition() ?: 0) - currentOffset
             subtitleAdapter =
-                SubtitleOffsetItemAdapter(initialSubtitlePosition, subtitles) { subtitleCue ->
+                SubtitleOffsetItemAdapter(initialSubtitlePosition) { subtitleCue ->
                     val playerPosition = player.getPosition() ?: 0
                     subtitleOffsetInput.text = Editable.Factory.getInstance()
                         ?.newEditable((playerPosition - subtitleCue.startTimeMs).toString())
+                }.apply {
+                    submitList(subtitles)
                 }
 
             subtitleOffsetRecyclerview.adapter = subtitleAdapter
@@ -641,6 +644,7 @@ open class FullScreenPlayer : AbstractPlayerFragment() {
                     activity?.hideSystemUI()
             }
             applyBtt.setOnClickListener {
+                subtitleDelay = currentOffset
                 dialog.dismissSafe(activity)
                 player.seekTime(1L)
             }
@@ -650,7 +654,6 @@ open class FullScreenPlayer : AbstractPlayerFragment() {
                 player.seekTime(1L)
             }
             cancelBtt.setOnClickListener {
-                subtitleDelay = beforeOffset
                 dialog.dismissSafe(activity)
             }
         }
@@ -662,7 +665,9 @@ open class FullScreenPlayer : AbstractPlayerFragment() {
         val speed = player.getPlaybackSpeed()
         binding.speedText.text = "%.2fx".format(speed).replace(".0x", "x")
         // Android crashes if you don't round to an exact step size
-        binding.speedBar.value = (speed.coerceIn(0.1f, 2.0f) / binding.speedBar.stepSize).roundToInt().toFloat() * binding.speedBar.stepSize
+        binding.speedBar.value =
+            (speed.coerceIn(0.1f, 2.0f) / binding.speedBar.stepSize).roundToInt()
+                .toFloat() * binding.speedBar.stepSize
     }
 
     private fun showSpeedDialog() {
@@ -1861,7 +1866,8 @@ open class FullScreenPlayer : AbstractPlayerFragment() {
             playerBinding?.apply {
                 playerSpeedBtt.isVisible = playBackSpeedEnabled
                 playerResizeBtt.isVisible = playerResizeEnabled
-                playerRotateBtt.isVisible = if(isLayout(TV or EMULATOR)) false else playerRotateEnabled
+                playerRotateBtt.isVisible =
+                    if (isLayout(TV or EMULATOR)) false else playerRotateEnabled
                 if (hideControlsNames) {
                     hideControlsNames()
                 }

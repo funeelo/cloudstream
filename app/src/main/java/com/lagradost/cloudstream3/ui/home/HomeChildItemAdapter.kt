@@ -8,6 +8,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import androidx.fragment.app.Fragment
 import androidx.preference.PreferenceManager
+import androidx.recyclerview.widget.RecyclerView
 import androidx.viewbinding.ViewBinding
 import coil3.load
 import com.lagradost.cloudstream3.R
@@ -43,25 +44,14 @@ class HomeScrollViewHolderState(view: ViewBinding) : ViewHolderState<Boolean>(vi
             }
         }
     }
-
-    override fun onViewRecycled() {
-        super.onViewRecycled()
-
-        // Clear the image, idk if this saves ram or not, but I guess?
-        view.root.findViewById<ImageView>(R.id.imageView)?.apply {
-            load(null)
-        }
-    }
 }
 
 class ResumeItemAdapter(
-    fragment: Fragment,
     nextFocusUp: Int? = null,
     nextFocusDown: Int? = null,
     clickCallback: (SearchClickCallback) -> Unit,
     private val removeCallback: (View) -> Unit,
 ) : HomeChildItemAdapter(
-    fragment = fragment,
     id = "resumeAdapter".hashCode(),
     nextFocusUp = nextFocusUp,
     nextFocusDown = nextFocusDown,
@@ -79,6 +69,11 @@ class ResumeItemAdapter(
             false
         ) else HomeRemoveGridBinding.inflate(inflater, parent, false)
         return HomeScrollViewHolderState(binding)
+    }
+
+    override fun onClearView(holder: ViewHolderState<Boolean>) {
+        // Clear the image, idk if this saves ram or not, but I guess?
+        clearImage(holder.view.root.findViewById(R.id.imageView))
     }
 
     override fun onBindFooter(holder: ViewHolderState<Boolean>) {
@@ -114,16 +109,15 @@ class ResumeItemAdapter(
 /** Remember to set `updatePosterSize` to cache the poster size,
  * otherwise the width and height is unset */
 open class HomeChildItemAdapter(
-    fragment: Fragment,
     id: Int,
     var nextFocusUp: Int? = null,
     var nextFocusDown: Int? = null,
     var clickCallback: (SearchClickCallback) -> Unit,
 ) :
     BaseAdapter<SearchResponse, Boolean>(
-        fragment, id, diffCallback = BaseDiffCallback(
+        id, diffCallback = BaseDiffCallback(
             itemSame = { a, b ->
-                a.url == b.url
+                a.url == b.url && a.name == b.name
             },
             contentSame = { a, b ->
                 a == b
@@ -168,6 +162,11 @@ open class HomeChildItemAdapter(
     }
 
     companion object {
+        // The vast majority of the lag comes from creating the view
+        // This simply shares the views between all HomeChildItemAdapter
+        val sharedPool =
+            RecyclerView.RecycledViewPool().apply { this.setMaxRecycledViews(CONTENT, 20) }
+
         var minPosterSize: Int = 0
         var maxPosterSize: Int = 0
 

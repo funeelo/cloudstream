@@ -88,6 +88,7 @@ import com.lagradost.cloudstream3.ui.result.ResultFragment
 import com.lagradost.cloudstream3.ui.result.ResultViewModel2
 import com.lagradost.cloudstream3.ui.result.setLinearListLayout
 import com.lagradost.cloudstream3.ui.result.SyncViewModel
+import com.lagradost.cloudstream3.ui.result.VideoWatchState
 import com.lagradost.cloudstream3.ui.settings.Globals.EMULATOR
 import com.lagradost.cloudstream3.ui.settings.Globals.isLayout
 import com.lagradost.cloudstream3.ui.settings.Globals.PHONE
@@ -101,6 +102,7 @@ import com.lagradost.cloudstream3.utils.Coroutines.ioSafe
 import com.lagradost.cloudstream3.utils.Coroutines.runOnMainThread
 import com.lagradost.cloudstream3.utils.DataStoreHelper
 import com.lagradost.cloudstream3.utils.DataStoreHelper.getViewPos
+import com.lagradost.cloudstream3.utils.DataStoreHelper.setVideoWatchState
 import com.lagradost.cloudstream3.utils.EpisodeSkip
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
@@ -116,6 +118,7 @@ import com.lagradost.cloudstream3.utils.txt
 import com.lagradost.cloudstream3.utils.UIHelper.clipboardHelper
 import com.lagradost.cloudstream3.utils.UIHelper.colorFromAttribute
 import com.lagradost.cloudstream3.utils.UIHelper.dismissSafe
+import com.lagradost.cloudstream3.utils.UIHelper.fixSystemBarsPadding
 import com.lagradost.cloudstream3.utils.UIHelper.hideSystemUI
 import com.lagradost.cloudstream3.utils.UIHelper.popCurrentPage
 import com.lagradost.cloudstream3.utils.UIHelper.toPx
@@ -614,14 +617,14 @@ class GeneratorPlayer : FullScreenPlayer() {
         val providers = subsProviders.toList()
         val isSingleProvider = subsProviders.size == 1
 
-        val dialog = Dialog(context, R.style.AlertDialogCustomBlack)
+        val dialog = Dialog(context, R.style.DialogFullscreenPlayer)
         val binding =
             DialogOnlineSubtitlesBinding.inflate(LayoutInflater.from(context), null, false)
         dialog.setContentView(binding.root)
+        fixSystemBarsPadding(binding.root)
 
         var currentSubtitles: List<AbstractSubtitleEntities.SubtitleEntity> = emptyList()
         var currentSubtitle: AbstractSubtitleEntities.SubtitleEntity? = null
-
 
         val layout = R.layout.sort_bottom_single_choice_double_text
         val arrayAdapter =
@@ -1036,11 +1039,12 @@ class GeneratorPlayer : FullScreenPlayer() {
                 player.handleEvent(CSPlayerEvent.Pause, PlayerEventSource.UI)
                 val currentSubtitles = sortSubs(currentSubs)
 
-                val sourceDialog = Dialog(ctx, R.style.AlertDialogCustomBlack)
+                val sourceDialog = Dialog(ctx, R.style.DialogFullscreenPlayer)
                 val binding =
                     PlayerSelectSourceAndSubsBinding.inflate(LayoutInflater.from(ctx), null, false)
                 sourceDialog.setContentView(binding.root)
 
+                fixSystemBarsPadding(binding.root)
                 selectSourceDialog = sourceDialog
 
                 sourceDialog.show()
@@ -1061,7 +1065,9 @@ class GeneratorPlayer : FullScreenPlayer() {
 
                 binding.subtitleSettingsBtt.setOnClickListener {
                     safe {
-                        SubtitlesFragment().show(this.parentFragmentManager, "SubtitleSettings")
+                        val subtitlesFragment = SubtitlesFragment()
+                        subtitlesFragment.systemBarsAddPadding = true
+                        subtitlesFragment.show(this.parentFragmentManager, "SubtitleSettings")
                     }
                 }
 
@@ -1295,7 +1301,7 @@ class GeneratorPlayer : FullScreenPlayer() {
                     val activity = activity ?: return@setOnClickListener
                     QualityProfileDialog(
                         activity,
-                        R.style.AlertDialogCustomBlack,
+                        R.style.DialogFullscreenPlayer,
                         currentLinks.mapNotNull { it.first },
                         currentQualityProfile
                     ) { profile ->
@@ -1393,9 +1399,11 @@ class GeneratorPlayer : FullScreenPlayer() {
                 val currentAudioTracks = tracks.allAudioTracks
                 val binding: PlayerSelectTracksBinding =
                     PlayerSelectTracksBinding.inflate(LayoutInflater.from(ctx), null, false)
-                val trackDialog = Dialog(ctx, R.style.AlertDialogCustomBlack)
+                val trackDialog = Dialog(ctx, R.style.DialogFullscreenPlayer)
                 trackDialog.setContentView(binding.root)
                 trackDialog.show()
+
+                fixSystemBarsPadding(binding.root)
 
 //                selectTracksDialog = tracksDialog
 
@@ -1602,49 +1610,15 @@ class GeneratorPlayer : FullScreenPlayer() {
                 viewModel.loadStamps(duration)
         }
 
-        viewModel.getId()?.let {
-            DataStoreHelper.setViewPos(it, position, duration)
-        }
-
         val percentage = position * 100L / duration
 
-        val nextEp = percentage >= NEXT_WATCH_EPISODE_PERCENTAGE
-        val resumeMeta = if (nextEp) nextMeta else currentMeta
-        if (resumeMeta == null && nextEp) {
-            // remove last watched as it is the last episode and you have watched too much
-            when (val newMeta = currentMeta) {
-                is ResultEpisode -> {
-                    DataStoreHelper.removeLastWatched(newMeta.parentId)
-                }
-
-                is ExtractorUri -> {
-                    DataStoreHelper.removeLastWatched(newMeta.parentId)
-                }
-            }
-        } else {
-            // save resume
-            when (resumeMeta) {
-                is ResultEpisode -> {
-                    DataStoreHelper.setLastWatched(
-                        resumeMeta.parentId,
-                        resumeMeta.id,
-                        resumeMeta.episode,
-                        resumeMeta.season,
-                        isFromDownload = false
-                    )
-                }
-
-                is ExtractorUri -> {
-                    DataStoreHelper.setLastWatched(
-                        resumeMeta.parentId,
-                        resumeMeta.id,
-                        resumeMeta.episode,
-                        resumeMeta.season,
-                        isFromDownload = true
-                    )
-                }
-            }
-        }
+        DataStoreHelper.setViewPosAndResume(
+            viewModel.getId(),
+            position,
+            duration,
+            currentMeta,
+            nextMeta
+        )
 
         var isOpVisible = false
         when (val meta = currentMeta) {
@@ -1989,6 +1963,7 @@ class GeneratorPlayer : FullScreenPlayer() {
     override fun showEpisodesOverlay() {
         try {
             playerBinding?.apply {
+                playerEpisodeList.setRecycledViewPool(EpisodeAdapter.sharedPool)
                 playerEpisodeList.adapter = EpisodeAdapter(
                     false,
                     { episodeClick ->
@@ -2010,7 +1985,7 @@ class GeneratorPlayer : FullScreenPlayer() {
                     nextRight = FOCUS_SELF,
                 )
                 val episodes = allMeta ?: emptyList()
-                (playerEpisodeList.adapter as? EpisodeAdapter)?.updateList(episodes)
+                (playerEpisodeList.adapter as? EpisodeAdapter)?.submitList(episodes)
 
                 // Scroll to current episode
                 viewModel.getCurrentIndex()?.let { index ->

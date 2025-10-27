@@ -7,13 +7,12 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
-import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.SearchView
 import androidx.core.content.ContextCompat
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
-import androidx.fragment.app.Fragment
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.findViewTreeLifecycleOwner
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewbinding.ViewBinding
@@ -23,7 +22,6 @@ import com.google.android.material.chip.ChipGroup
 import com.google.android.material.navigation.NavigationBarItemView
 import com.lagradost.cloudstream3.AcraApplication.Companion.getActivity
 import com.lagradost.cloudstream3.CommonActivity.activity
-import com.lagradost.cloudstream3.CommonActivity.showToast
 import com.lagradost.cloudstream3.HomePageList
 import com.lagradost.cloudstream3.LoadResponse
 import com.lagradost.cloudstream3.MainActivity
@@ -35,13 +33,11 @@ import com.lagradost.cloudstream3.mvvm.Resource
 import com.lagradost.cloudstream3.mvvm.debugException
 import com.lagradost.cloudstream3.mvvm.logError
 import com.lagradost.cloudstream3.mvvm.observe
-import com.lagradost.cloudstream3.ui.APIRepository.Companion.noneApi
 import com.lagradost.cloudstream3.ui.ViewHolderState
 import com.lagradost.cloudstream3.ui.WatchType
 import com.lagradost.cloudstream3.ui.account.AccountHelper.showAccountEditDialog
 import com.lagradost.cloudstream3.ui.account.AccountHelper.showAccountSelectLinear
 import com.lagradost.cloudstream3.ui.account.AccountViewModel
-import com.lagradost.cloudstream3.ui.home.HomeFragment.Companion.selectHomepage
 import com.lagradost.cloudstream3.ui.result.FOCUS_SELF
 import com.lagradost.cloudstream3.ui.result.ResultViewModel2
 import com.lagradost.cloudstream3.ui.result.START_ACTION_RESUME_LATEST
@@ -64,11 +60,11 @@ import com.lagradost.cloudstream3.utils.UIHelper.fixPaddingStatusbarView
 import com.lagradost.cloudstream3.utils.UIHelper.populateChips
 
 class HomeParentItemAdapterPreview(
-    override val fragment: Fragment,
+    val fragment: LifecycleOwner,
     private val viewModel: HomeViewModel,
     private val accountViewModel: AccountViewModel
 ) : ParentItemAdapter(
-    fragment, id = "HomeParentItemAdapterPreview".hashCode(),
+    id = "HomeParentItemAdapterPreview".hashCode(),
     clickCallback = {
         viewModel.click(it)
     }, moreInfoClickCallback = {
@@ -106,18 +102,34 @@ class HomeParentItemAdapterPreview(
             )
         }
 
-        return HeaderViewHolder(binding, viewModel, accountViewModel, fragment = fragment)
+        return HeaderViewHolder(binding, viewModel, accountViewModel, fragment)
     }
 
     override fun onBindHeader(holder: ViewHolderState<Bundle>) {
         (holder as? HeaderViewHolder)?.bind()
     }
 
+    override fun onViewDetachedFromWindow(holder: ViewHolderState<Bundle>) {
+        when (holder) {
+            is HeaderViewHolder -> {
+                holder.onViewDetachedFromWindow()
+            }
+        }
+    }
+
+    override fun onViewAttachedToWindow(holder: ViewHolderState<Bundle>) {
+        when (holder) {
+            is HeaderViewHolder -> {
+                holder.onViewAttachedToWindow()
+            }
+        }
+    }
+
     private class HeaderViewHolder(
         val binding: ViewBinding,
         val viewModel: HomeViewModel,
         accountViewModel: AccountViewModel,
-        fragment: Fragment,
+        fragment: LifecycleOwner,
     ) :
         ViewHolderState<Bundle>(binding) {
 
@@ -143,14 +155,13 @@ class HomeParentItemAdapterPreview(
             }
         }
 
-        val previewAdapter = HomeScrollAdapter(fragment = fragment) { view, position, item ->
+        val previewAdapter = HomeScrollAdapter { view, position, item ->
             viewModel.click(
                 LoadClickCallback(0, view, position, item)
             )
         }
 
         private val resumeAdapter = ResumeItemAdapter(
-            fragment,
             nextFocusUp = itemView.nextFocusUpId,
             nextFocusDown = itemView.nextFocusDownId,
             removeCallback = { v ->
@@ -233,7 +244,6 @@ class HomeParentItemAdapterPreview(
                 }
             })
         private val bookmarkAdapter = HomeChildItemAdapter(
-            fragment,
             id = "bookmarkAdapter".hashCode(),
             nextFocusUp = itemView.nextFocusUpId,
             nextFocusDown = itemView.nextFocusDownId
@@ -432,7 +442,7 @@ class HomeParentItemAdapterPreview(
                 }
             }
 
-        override fun onViewDetachedFromWindow() {
+        fun onViewDetachedFromWindow() {
             previewViewpager.unregisterOnPageChangeCallback(previewCallback)
         }
 
@@ -453,12 +463,14 @@ class HomeParentItemAdapterPreview(
 
             previewViewpager.adapter = previewAdapter
             resumeRecyclerView.adapter = resumeAdapter
+            bookmarkRecyclerView.setRecycledViewPool(HomeChildItemAdapter.sharedPool)
             bookmarkRecyclerView.adapter = bookmarkAdapter
 
             resumeRecyclerView.setLinearListLayout(
                 nextLeft = R.id.nav_rail_view,
                 nextRight = FOCUS_SELF
             )
+
             bookmarkRecyclerView.setLinearListLayout(
                 nextLeft = R.id.nav_rail_view,
                 nextRight = FOCUS_SELF
@@ -482,7 +494,7 @@ class HomeParentItemAdapterPreview(
             headProfilePicCard?.isGone = isLayout(TV or EMULATOR)
             alternateHeadProfilePicCard?.isGone = isLayout(TV or EMULATOR)
 
-            viewModel.currentAccount.observe(fragment.viewLifecycleOwner) { currentAccount ->
+            fragment.observe(viewModel.currentAccount) { currentAccount ->
                 headProfilePic?.loadImage(currentAccount?.image)
                 alternateHeadProfilePic?.loadImage(currentAccount?.image)
             }
@@ -598,9 +610,7 @@ class HomeParentItemAdapterPreview(
                     params.height = 0
                     layoutParams = params
                 }
-            } else {
-                fixPaddingStatusbarView(homeNonePadding)
-            }
+            } else fixPaddingStatusbarView(homeNonePadding)
 
             when (preview) {
                 is Resource.Success -> {
@@ -706,7 +716,7 @@ class HomeParentItemAdapterPreview(
             }
         }
 
-        override fun onViewAttachedToWindow() {
+        fun onViewAttachedToWindow() {
             previewViewpager.registerOnPageChangeCallback(previewCallback)
 
             binding.root.findViewTreeLifecycleOwner()?.apply {

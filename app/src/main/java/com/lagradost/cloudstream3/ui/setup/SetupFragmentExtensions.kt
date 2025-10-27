@@ -17,8 +17,7 @@ import com.lagradost.cloudstream3.plugins.RepositoryManager.PREBUILT_REPOSITORIE
 import com.lagradost.cloudstream3.ui.settings.extensions.PluginsViewModel
 import com.lagradost.cloudstream3.ui.settings.extensions.RepoAdapter
 import com.lagradost.cloudstream3.utils.Coroutines.main
-import com.lagradost.cloudstream3.utils.UIHelper.fixPaddingStatusbar
-
+import com.lagradost.cloudstream3.utils.UIHelper.fixSystemBarsPadding
 
 class SetupFragmentExtensions : Fragment() {
     companion object {
@@ -73,7 +72,7 @@ class SetupFragmentExtensions : Fragment() {
             if (hasRepos) {
                 binding?.repoRecyclerView?.adapter = RepoAdapter(true, {}, {
                     PluginsViewModel.downloadAll(activity, it.url, null)
-                }).apply { updateList(repositories) }
+                }).apply { submitList(repositories.toList()) }
             }
 //            else {
 //                list_repositories?.setOnClickListener {
@@ -86,7 +85,7 @@ class SetupFragmentExtensions : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        fixPaddingStatusbar(binding?.setupRoot)
+        fixSystemBarsPadding(binding?.setupRoot)
         val isSetup = arguments?.getBoolean(SETUP_EXTENSION_BUNDLE_IS_SETUP) ?: false
 
 //        view_public_repositories_button?.setOnClickListener {
@@ -94,7 +93,7 @@ class SetupFragmentExtensions : Fragment() {
 //        }
 
         safe {
-           // val ctx = context ?: return@safe
+            // val ctx = context ?: return@safe
             setRepositories()
             binding?.apply {
                 if (!isSetup) {
