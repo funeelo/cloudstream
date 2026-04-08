@@ -47,10 +47,6 @@ android {
         includeInBundle = false
     }
 
-    viewBinding {
-        enable = true
-    }
-
     signingConfigs {
         // We just use SIGNING_KEY_ALIAS here since it won't change
         // so won't kill the configuration cache.
@@ -178,6 +174,7 @@ android {
     buildFeatures {
         buildConfig = true
         resValues = true
+        viewBinding = true
     }
 
     packaging {
