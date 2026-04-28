@@ -20,7 +20,7 @@ open class Mp4Upload : ExtractorApi() {
         referer: String?
     ): List<ExtractorLink>? {
 
-        // 🔑 Pastikan selalu pakai embed URL
+        
         val realUrl = idMatch.find(url)?.groupValues?.get(2)?.let { id ->
             "$mainUrl/embed-$id.html"
         } ?: url
@@ -35,11 +35,9 @@ open class Mp4Upload : ExtractorApi() {
 
         val text = getAndUnpack(response.text)
 
-        // 🔍 DEBUG (hapus nanti kalau sudah fix)
+        
         println("MP4UPLOAD PAGE:")
         println(text)
-
-        val links = mutableListOf<ExtractorLink>()
 
         val patterns = listOf(
             Regex("file\\s*:\\s*\"(https?://[^\"']+)\""),
@@ -47,6 +45,8 @@ open class Mp4Upload : ExtractorApi() {
             Regex("player\\.src\\(\"(https?://[^\"']+)\""),
             Regex("src\\s*:\\s*\"(https?://[^\"']+)\"")
         )
+
+        val links = mutableListOf<ExtractorLink>()
 
         for (regex in patterns) {
             val match = regex.find(text)?.groupValues?.getOrNull(1)
@@ -60,12 +60,15 @@ open class Mp4Upload : ExtractorApi() {
                         name,
                         match
                     ) {
+                        
                         this.referer = realUrl
 
                         this.headers = mapOf(
-                            "User-Agent" to "Mozilla/5.0",
+                            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
                             "Referer" to realUrl,
-                            "Accept" to "*/*"
+                            "Accept" to "*/*",
+                            "Range" to "bytes=0-",
+                            "Accept-Encoding" to "identity"
                         )
 
                         this.quality = Qualities.Unknown.value
